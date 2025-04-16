@@ -7,16 +7,19 @@ from langchain.schema import Document
 from .constants import MAX_AGENT_DESC_LENGTH
 from .kg_langgraph_agent import KGQueryReflexionAgent
 from .prompts import BioCypherPromptEngine
-
+from .SparqlPromptEngine import SparqlPromptEngine
+from .api_agent.web.rdf import SPARQLEndpoint
 
 class DatabaseAgent:
     def __init__(
         self,
         model_name: str,
         connection_args: dict,
-        schema_config_or_info_dict: dict,
+        schema_config_or_info_dict: dict | None,
+        ttl_file_path: str | None,
         conversation_factory: Callable,
         use_reflexion: bool,
+        kg_type: str = "neo4j",
     ) -> None:
         """Create a DatabaseAgent analogous to the VectorDatabaseAgentMilvus class,
         which can return results from a database using a query engine. Currently
@@ -35,17 +38,20 @@ class DatabaseAgent:
 
         """
         self.conversation_factory = conversation_factory
-        self.prompt_engine = BioCypherPromptEngine(
+        self.kg_type = kg_type
+        self.prompt_engine = None
+        self.set_prompt_engine(
             model_name=model_name,
             schema_config_or_info_dict=schema_config_or_info_dict,
+            ttl_file_path=ttl_file_path,
             conversation_factory=conversation_factory,
         )
         self.connection_args = connection_args
         self.driver = None
         self.use_reflexion = use_reflexion
 
-    def connect(self) -> None:
-        """Connect to the database and authenticate."""
+    def connect(self, di) -> None:
+        """Connect to a Neo4j database."""
         db_name = self.connection_args.get("db_name")
         uri = f"{self.connection_args.get('host')}:{self.connection_args.get('port')}"
         uri = uri if uri.startswith("bolt://") else "bolt://" + uri
@@ -57,6 +63,26 @@ class DatabaseAgent:
             user=user,
             password=password,
         )
+    
+    def connect_sparql(self, fetcher:SPARQLEndpoint) -> None:
+        """Connect to a SPARQL database."""
+        self.driver = fetcher
+    
+
+    def set_prompt_engine(self, model_name: str, schema_config_or_info_dict: dict, ttl_file_path:str | None, conversation_factory: Callable) -> None:
+        if self.prompt_engine is None:
+            if self.kg_type == "neo4j":
+                self.prompt_engine = BioCypherPromptEngine(
+                model_name=model_name,
+                schema_config_or_info_dict=schema_config_or_info_dict,
+                conversation_factory=conversation_factory,
+                )
+            if self.kg_type == "sparql":
+                self.prompt_engine = SparqlPromptEngine(
+                model_name=model_name,
+                ttl_file_path=ttl_file_path,
+                conversation_factory=conversation_factory,
+                )
 
     def is_connected(self) -> bool:
         return self.driver is not None
@@ -137,6 +163,8 @@ class DatabaseAgent:
             query,
         )  # self.prompt_engine.generate_query(query)
         # TODO some logic if it fails?
+        print("cypher_query", cypher_query)
+        print("tool_result", tool_result)
         if tool_result is not None:
             # If _generate_query() already returned tool_result, we won't connect
             # to graph database to query result any more
@@ -144,6 +172,7 @@ class DatabaseAgent:
         else:
             results = self.driver.query(query=cypher_query)
 
+        print(results)
         # return first k results
         # returned nodes can have any formatting, and can also be empty or fewer
         # than k

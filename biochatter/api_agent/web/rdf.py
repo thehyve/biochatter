@@ -224,3 +224,34 @@ class RdfInterpreter(BaseInterpreter):
         chain = prompt | conversation.chat | output_parser
         answer = chain.invoke({"input": {summary_prompt}})
         return answer
+
+
+import base64
+
+class SPARQLEndpoint:
+    def __init__(self, params:dict):
+        self.params = params
+
+        self.headers:dict = {
+            'Content-Type': 'application/sparql-query',
+            'Accept': 'application/json',
+        }
+
+    def query(self, query):
+        print(self.params.get('endpoint'))
+        print("headers", self.headers)
+        response = requests.post(self.params.get('endpoint'), headers=self.headers, data=query)
+        response.raise_for_status()
+        return [[response.json()]]
+    
+    def add_header(self, key:str, value:str):
+        self.headers[key] = value
+
+
+class FairspaceEndpoint(SPARQLEndpoint):
+    def __init__(self, params:dict):
+        super().__init__(params)
+        user = params.get('user')
+        password = params.get('password')
+        auth_header = base64.b64encode(f'{user}:{password}'.encode()).decode()
+        self.headers['Authorization'] = f"Basic {auth_header}"

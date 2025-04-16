@@ -83,9 +83,6 @@ class SparqlPromptEngine:
         # a reason? offer visual selection of entities and relationships by the
         # user?
 
-        print("result", result)
-        print("entities", self.entities)
-
         if result:
             for entity in result:
                 entity = entity.strip()
@@ -125,7 +122,6 @@ class SparqlPromptEngine:
                 "No entities found. Please run the entity selection step first.",
             )
         
-        print("selected entities", self.selected_entities)
         rels = {}
 
         for entity in self.selected_entities:
